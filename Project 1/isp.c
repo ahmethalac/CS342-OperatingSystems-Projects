@@ -51,29 +51,38 @@ int main(int argc, char *argv[]) {
                 wait(NULL);
             }
         } else { //Composition mode
-            if (argc == 3 && strcmp(argv[2], "1") == 0) { //Normal mode
-                int fd[2];
-                pipe(fd);
+            if (argc == 3) { //Arguments are given correctly
+                if (strcmp(argv[2], "1") == 0) { //Normal mode
+                    int fd[2];
+                    pipe(fd);
 
-                if (fork() == 0) {
-                    dup2(fd[WRITE_END], STDOUT_FILENO);
-                    close(fd[READ_END]);
-                    close(fd[WRITE_END]);
-                    char **args = getArgs(firstCommand);
-                    execvp(args[0], args);
-                } else {
                     if (fork() == 0) {
-                        dup2(fd[READ_END], STDIN_FILENO);
+                        dup2(fd[WRITE_END], STDOUT_FILENO);
                         close(fd[READ_END]);
                         close(fd[WRITE_END]);
-                        char **args = getArgs(secondCommand);
+                        char **args = getArgs(firstCommand);
                         execvp(args[0], args);
                     } else {
-                        close(fd[READ_END]);
-                        close(fd[WRITE_END]);
+                        if (fork() == 0) {
+                            dup2(fd[READ_END], STDIN_FILENO);
+                            close(fd[READ_END]);
+                            close(fd[WRITE_END]);
+                            char **args = getArgs(secondCommand);
+                            execvp(args[0], args);
+                        } else {
+                            close(fd[READ_END]);
+                            close(fd[WRITE_END]);
+                            wait(NULL);
+                        }
                     }
-                }
+                } else { //Tapped mode
 
+                }
+            } else {
+                printf("Arguments are not given correctly!\n"
+                       "Please run the program with two arguments "
+                       "in the format that is specified in project description!\n");
+                break;
             }
         }
 

@@ -3,9 +3,42 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/wait.h>
+#include <sys/time.h>
 
 #define WRITE_END 1
 #define READ_END 0
+
+void yellow() {
+    printf("\033[1;33m");
+}
+
+void green() {
+    printf("\033[1;32m");
+}
+
+void blue() {
+    printf("\033[;34m");
+}
+
+void reset() {
+    printf("\033[0m");
+}
+
+void printElapsedTime(struct timeval start, struct timeval end) {
+    long microsecond = ((end.tv_sec * 1000000 + end.tv_usec) -
+                        (start.tv_sec * 1000000 + start.tv_usec));
+    green();
+    printf("Done in ");
+    if (microsecond / 1000000 > 0) {
+        printf("%ld seconds, ", microsecond / 1000000);
+    }
+    if (microsecond / 1000 > 0) {
+        printf("%ld milliseconds, ", (microsecond % 1000000) / 1000);
+    }
+    printf("%ld microseconds!\n", (microsecond % 1000));
+    reset();
+}
+
 char** getArgs(char* command) {
     int argCount = 1;
     for (int i = 0; i < 256; i++) {
@@ -31,8 +64,9 @@ char** getArgs(char* command) {
 
 int main(int argc, char *argv[]) {
     while (1) {
+        blue();
         printf("isp$ ");
-
+        reset();
         char command[256];
         fgets(command, 256, stdin);
 
@@ -52,6 +86,8 @@ int main(int argc, char *argv[]) {
             }
         } else { //Composition mode
             if (argc == 3) { //Arguments are given correctly
+                struct timeval start, end;
+                gettimeofday(&start, NULL);
                 if (strcmp(argv[2], "1") == 0) { //Normal mode
                     int fd[2];
                     pipe(fd);
@@ -77,8 +113,63 @@ int main(int argc, char *argv[]) {
                         }
                     }
                 } else { //Tapped mode
+                    int fd1[2];
+                    int fd2[2];
+                    int MSGSIZE = atoi(argv[1]);
+                    pipe(fd1);
+                    pipe(fd2);
 
+                    if (fork() == 0) {
+                        close(fd2[READ_END]);
+                        close(fd2[WRITE_END]);
+                        close(fd1[READ_END]);
+                        dup2(fd1[WRITE_END], STDOUT_FILENO);
+                        char **args = getArgs(firstCommand);
+                        execvp(args[0], args);
+                        exit(0);
+                    } else {
+                        if (fork() == 0) {
+                            close(fd1[READ_END]);
+                            close(fd1[WRITE_END]);
+                            close(fd2[WRITE_END]);
+                            dup2(fd2[READ_END], STDIN_FILENO);
+                            char **args = getArgs(secondCommand);
+                            execvp(args[0], args);
+                            exit(0);
+                        } else {
+                            char buffer[MSGSIZE];
+                            close(fd1[WRITE_END]);
+                            close(fd2[READ_END]);
+
+                            int readWriteOperationCount = 0;
+                            int totalBytes = 0;
+                            int bytes;
+
+                            while ((bytes = read(fd1[READ_END], buffer, MSGSIZE)) > 0) {
+                                if (write(fd2[WRITE_END], buffer, bytes) == -1) {
+                                    printf("Error while writing to pipe!");
+                                    exit(EXIT_FAILURE);
+                                }
+                                readWriteOperationCount++;
+
+                                totalBytes += bytes;
+                            }
+
+                            close(fd2[WRITE_END]);
+                            close(fd1[READ_END]);
+
+                            wait(NULL);
+                            wait(NULL);
+
+                            yellow();
+                            printf("character-count: %d\n", totalBytes);
+                            printf("read-call-count: %d\n", readWriteOperationCount);
+                            printf("write-call-count: %d\n", readWriteOperationCount);
+                        }
+                    }
                 }
+                gettimeofday(&end, NULL);
+                printElapsedTime(start, end);
             } else {
                 printf("Arguments are not given correctly!\n"
                        "Please run the program with two arguments "

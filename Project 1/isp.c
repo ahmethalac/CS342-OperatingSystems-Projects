@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <malloc.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -45,17 +44,35 @@ int main(int argc, char *argv[]) {
         char *secondCommand = strtok(NULL, "|");
 
         if (secondCommand == NULL) { //Classic mode
-            char **args = getArgs(firstCommand);
-
             if (fork() == 0) {
+                char **args = getArgs(firstCommand);
                 execvp(args[0], args);
-                exit(0);
             } else {
                 wait(NULL);
-                free(args);
             }
         } else { //Composition mode
             if (argc == 3 && strcmp(argv[2], "1") == 0) { //Normal mode
+                int fd[2];
+                pipe(fd);
+
+                if (fork() == 0) {
+                    dup2(fd[WRITE_END], STDOUT_FILENO);
+                    close(fd[READ_END]);
+                    close(fd[WRITE_END]);
+                    char **args = getArgs(firstCommand);
+                    execvp(args[0], args);
+                } else {
+                    if (fork() == 0) {
+                        dup2(fd[READ_END], STDIN_FILENO);
+                        close(fd[READ_END]);
+                        close(fd[WRITE_END]);
+                        char **args = getArgs(secondCommand);
+                        execvp(args[0], args);
+                    } else {
+                        close(fd[READ_END]);
+                        close(fd[WRITE_END]);
+                    }
+                }
 
             }
         }

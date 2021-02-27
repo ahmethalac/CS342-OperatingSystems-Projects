@@ -1,6 +1,7 @@
 CMakeLists.txt
-isp
-producer
-consumer
 cmake-build-debug
 .idea
+
+Project 1/isp
+Project 1/producer
+Project 1/consumer

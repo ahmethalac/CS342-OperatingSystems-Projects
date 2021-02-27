@@ -63,7 +63,8 @@ int main(int argc, char *argv[]) {
                         char **args = getArgs(firstCommand);
                         execvp(args[0], args);
                     } else {
-                        if (fork() == 0) {
+                        pid_t secondProcess = fork();
+                        if (secondProcess == 0) {
                             dup2(fd[READ_END], STDIN_FILENO);
                             close(fd[READ_END]);
                             close(fd[WRITE_END]);
@@ -72,7 +73,7 @@ int main(int argc, char *argv[]) {
                         } else {
                             close(fd[READ_END]);
                             close(fd[WRITE_END]);
-                            wait(NULL);
+                            waitpid(secondProcess, NULL, 0);
                         }
                     }
                 } else { //Tapped mode

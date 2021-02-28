@@ -71,8 +71,8 @@ int main(int argc, char *argv[]) {
             }
         } else { //Composition mode
             if (argc == 3) { //Arguments are given correctly
-                struct timeval start, end;
-                gettimeofday(&start, NULL);
+                //struct timeval start, end;
+                //gettimeofday(&start, NULL);
 
                 if (strcmp(argv[2], "1") == 0) { //Normal mode
                     int fd[2];
@@ -158,8 +158,8 @@ int main(int argc, char *argv[]) {
                     }
                 }
 
-                gettimeofday(&end, NULL);
-                printElapsedTime(start, end);
+                //gettimeofday(&end, NULL);
+                //printElapsedTime(start, end);
             } else {
                 printf("Arguments are not given correctly!\n"
                        "Please run the program with two arguments "

@@ -1,9 +1,10 @@
 #include <stdlib.h>
-#include <stdio.h>
+#include <unistd.h>
 
 int main(int argc, char *argv[])
 {
+    char c;
     for (int i = 0; i < atoi(argv[1]); i++) {
-        getchar();
+        read(STDIN_FILENO, &c, 1);
     }
 }

@@ -195,7 +195,7 @@ void* W_thread(void* args) {
     int avgA = ((wThreadArgs*)args)->avgA;
 
     // Set different seed for each thread
-    unsigned int seed = ID;
+    unsigned int seed = time(NULL) * ID;
 
     if (readFromFile == 1) { //Read bursts from file
         createBurstsFromFile(inprefix, ID);

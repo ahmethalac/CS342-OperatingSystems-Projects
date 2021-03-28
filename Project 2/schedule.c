@@ -53,8 +53,8 @@ long getCurrentTime() {
 }
 
 void createBurst(int threadIndex, int burstIndex, int length, int sleepAmount) {
-    printf("[%ld] %dth thread sleeps for %d\n",
-           getCurrentTime() - timeOffset, threadIndex, sleepAmount);
+    //printf("[%ld] %dth thread sleeps for %d\n",
+    //       getCurrentTime() - timeOffset, threadIndex, sleepAmount);
 
     usleep(sleepAmount * 1000);
 
@@ -66,8 +66,8 @@ void createBurst(int threadIndex, int burstIndex, int length, int sleepAmount) {
     pthread_mutex_lock(&lock);
 
     temp->generationTime = getCurrentTime();
-    printf("[%ld] %d.%d(%d) is created\n",
-           getCurrentTime() - timeOffset, threadIndex, burstIndex, length);
+    //printf("[%ld] %d.%d(%d) is created\n",
+    //       getCurrentTime() - timeOffset, threadIndex, burstIndex, length);
 
     // Add burst to the end of runqueue
     if (!SLIST_EMPTY(&head)) {
@@ -232,9 +232,9 @@ void* S_thread(void* args) {
     while (done == 0 || !SLIST_EMPTY(&head)) {
         pthread_mutex_lock(&lock);
         if (SLIST_EMPTY(&head)) {
-            printf("[%ld] Waiting for a burst in S_thread\n", getCurrentTime() - timeOffset);
+            //printf("[%ld] Waiting for a burst in S_thread\n", getCurrentTime() - timeOffset);
             pthread_cond_wait(&rqEmpty, &lock);
-            printf("[%ld] New burst arrived, finish waiting in S_thread\n", getCurrentTime() - timeOffset);
+            //printf("[%ld] New burst arrived, finish waiting in S_thread\n", getCurrentTime() - timeOffset);
         }
 
         burstNode* chosenBurst;
@@ -252,16 +252,17 @@ void* S_thread(void* args) {
         totalWaitingTime[chosenBurst->threadIndex - 1] += getCurrentTime() - chosenBurst->generationTime;
         SLIST_REMOVE(&head, chosenBurst, burst, next);
 
-        printf("[%ld] Running %d.%d(%d) -- ",
-               getCurrentTime() - timeOffset, chosenBurst->threadIndex, chosenBurst->burstIndex, chosenBurst->length);
-        printf("Waiting time is: %ld\n", getCurrentTime() - chosenBurst->generationTime);
+        //printf("[%ld] Running %d.%d(%d) -- ",
+        //       getCurrentTime() - timeOffset, chosenBurst->threadIndex, chosenBurst->burstIndex, chosenBurst->length);
+        //printf("Waiting time is: %ld\n", getCurrentTime() - chosenBurst->generationTime);
 
         pthread_mutex_unlock(&lock);
         usleep(chosenBurst->length * 1000);
         free(chosenBurst);
     }
 
-    printf("\nAverage waiting times:\n");
+    /*
+    printf("Average waiting times:\n");
     int totalSum = 0;
     int totalBurstCount = 0;
     for (int i = 0; i < N; ++i) {
@@ -270,6 +271,7 @@ void* S_thread(void* args) {
         totalSum += totalWaitingTime[i];
     }
     printf("Total average waiting time: %.2f\n", totalSum / (double)totalBurstCount );
+    */
     return 0;
 }
 

@@ -8,3 +8,9 @@ Project 1/consumer
 
 Project 2/schedule
 Project 2/*.txt
+
+Project 3/app
+Project 3/create_memory_sb
+Project 3/destroy_memory_sb
+Project 3/libsbmemlib.a
+Project 3/sbmemlib.o

@@ -25,7 +25,7 @@ struct process {
 
 struct spaceInformation {
     int nextFreeLocation;
-    int size;
+    int order;
     int is_allocated;
 };
 
@@ -38,11 +38,13 @@ struct sbmemInformation {
 };
 
 int getOrderFromSize(int segmentsize) {
-    return ceil((int)(log2((double)segmentsize)));
+    printf("segmentsize: %d\norder: %d\n", segmentsize, (int)ceil(log2((double)segmentsize)) );
+    return (int)ceil(log2((double)segmentsize));
 }
 
 int sbmem_init(int segmentsize)
 {
+    shm_unlink(NAME);
     int sbmem_fd = shm_open(NAME, O_CREAT | O_RDWR | O_EXCL, 0666);
 
     if (sbmem_fd == -1) {
@@ -76,7 +78,10 @@ int sbmem_init(int segmentsize)
         info->freeSpaces[i] = -1;
     }
 
-    sbmem_alloc(sizeof(struct sbmemInformation));
+    info->dummyInformation.nextFreeLocation = -1;
+    info->dummyInformation.order = (int)log2(segmentsize);
+    info->dummyInformation.is_allocated = 1;
+
     printf("sbmem init called\n"); // remove all printfs when you are submitting to us.
 
     //Initializing semaphore
@@ -87,7 +92,9 @@ int sbmem_init(int segmentsize)
         printf("Semaphore cannot be created succesfully!\n");
         exit(1);
     }
-    return (0); 
+
+    sbmem_alloc(sizeof(struct sbmemInformation));
+    return (0);
 }
 
 int sbmem_remove()
@@ -97,8 +104,8 @@ int sbmem_remove()
 
     sem_post(sem);
     // TODO Remove semaphore
-    sem_unlink(sem);
-    return (0); 
+    sem_unlink(SEM_NAME);
+    return (0);
 }
 
 void *getMMapForSegment() {
@@ -137,11 +144,11 @@ int sbmem_open()
     info->processes[newProcessIndex].pid = getpid();
     info->processes[newProcessIndex].offset = ptr;
 
-    printf("%d, %d, %ld\n", newProcessIndex,info->processes[newProcessIndex].pid, info->processes[newProcessIndex].offset);
+    //printf("%d, %d, %ld\n", newProcessIndex,info->processes[newProcessIndex].pid, info->processes[newProcessIndex].offset);
 
 
-    //unmap the ptr 
-    int success = munmap(ptr, info->size); 
+    //unmap the ptr
+    int success = munmap(ptr, info->size);
     if(success == -1){
         printf("sbmem_open: unmapping cannot be done successfully!\n");
     }
@@ -150,14 +157,87 @@ int sbmem_open()
     return 0;
 }
 
-int extractFreeSpace(void* sbmemPtr, struct sbmemInformation* info, int size, int order, void* offset) {
+int extractFreeSpace(void* sbmemPtr, struct sbmemInformation* info, int order) {
     int result = info->freeSpaces[order];
-    info->freeSpaces[order] = *(sbmemPtr + info->freeSpaces[order]);
-    return offset == NULL ? result : result + sizeof(struct spaceInformation);
+    struct spaceInformation* allocatedSpace = (struct spaceInformation*)(sbmemPtr + info->freeSpaces[order]);
+    info->freeSpaces[order] = allocatedSpace->nextFreeLocation;
+    allocatedSpace->is_allocated = 1;
+    return result;
 }
 
-void addFreeSpace(void* sbmemPtr, struct sbmemInformation* info, int size, int offset, int order) {
+void printInfo(struct sbmemInformation* info) {
+    printf("Overhead:\nNextfree: %d\nOrder: %d\n", info->dummyInformation.nextFreeLocation, info->dummyInformation.order);
+    printf("Size: %d\n", info->size);
+    //printf("Processes:\n");
+    //for (int i = 0; i < MAX_PROCESS_COUNT; ++i) {
+    //    printf("[%d] pid: %d, offset: %p\n", i, info->processes[i].pid, info->processes[i].offset);
+    //}
+    printf("FreeSpaces:\n");
+    for (int i = 0; i < MAX_ORDER; ++i) {
+        printf("[%d] -> %d\n", i, info->freeSpaces[i]);
+    }
+}
 
+void addSpace(void *sbmemPtr, struct sbmemInformation* info, int offset, int order) {
+    int foundLocation = info->freeSpaces[order];
+    if (foundLocation == -1) {
+        struct spaceInformation *overhead = sbmemPtr + offset;
+        overhead->nextFreeLocation = -1;
+        overhead->order = order;
+        overhead->is_allocated = 0;
+        info->freeSpaces[order] = offset;
+    } else {
+        while (1) {
+            struct spaceInformation* spaceInfo = (struct spaceInformation *) (sbmemPtr + foundLocation);
+            if (spaceInfo->nextFreeLocation == -1 || spaceInfo->nextFreeLocation > offset) {
+                struct spaceInformation *overhead = sbmemPtr + offset;
+                overhead->nextFreeLocation = spaceInfo->nextFreeLocation;
+                overhead->order = order;
+                overhead->is_allocated = 0;
+                spaceInfo->nextFreeLocation = offset;
+                break;
+            } else {
+                foundLocation = spaceInfo->nextFreeLocation;
+            }
+        }
+    }
+}
+
+void removeSpace(void *sbmemPtr, struct sbmemInformation* info, int offset, int order) {
+    int foundLocation = info->freeSpaces[order];
+    if (foundLocation == offset) {
+        struct spaceInformation* removedSpaceInformation = (struct spaceInformation *) (sbmemPtr + offset);
+        info->freeSpaces[order] = removedSpaceInformation->nextFreeLocation;
+    } else if (foundLocation != -1){
+        while (1) {
+            struct spaceInformation* spaceInfo = (struct spaceInformation *) (sbmemPtr + foundLocation);
+            if (spaceInfo->nextFreeLocation == offset) {
+                struct spaceInformation* removedSpaceInformation = (struct spaceInformation *) (sbmemPtr + offset);
+                spaceInfo->nextFreeLocation = removedSpaceInformation->nextFreeLocation;
+                break;
+            } else {
+                foundLocation = spaceInfo->nextFreeLocation;
+            }
+        }
+    }
+}
+void divideSpace(void* sbmemPtr, struct sbmemInformation* info, int offset, int order) {
+    removeSpace(sbmemPtr, info, offset, order);
+    addSpace(sbmemPtr, info, offset, order - 1);
+    addSpace(sbmemPtr, info, offset + (int)pow(2, order - 1), order - 1);
+    printInfo(info);
+}
+
+void printMemory() {
+    int *ptr = getMMapForSegment();
+    for (int i = 0; i < 256; ++i) {
+        if ( i % 32 == 0) {
+            printf("\n");
+        }
+        printf("%d-", *ptr);
+        ptr++;
+    }
+    printf("\n");
 }
 
 void *sbmem_alloc (int size)
@@ -176,62 +256,74 @@ void *sbmem_alloc (int size)
         }
     }
 
-    if (offset != NULL) {
-        printf("%p %p", ptr, offset);
-    }
-    int requiredSize = offset == NULL ? size : size + sizeof(struct spaceInformation);
+    int requiredSize = size + sizeof(struct spaceInformation);
     int found = 0;
     int offsetOfSpace = -1;
     int order = getOrderFromSize(requiredSize);
+
+    printInfo(info);
     while (found == 0) {
-        if (info->freeSpaces[order]) {
-            offsetOfSpace = extractFreeSpace(ptr, info, requiredSize, order, offset);
+        if (info->freeSpaces[order] != -1) {
+            offsetOfSpace = extractFreeSpace(ptr, info, order);
             found = 1;
-        } else if (order < MAX_ORDER) {
+        } else if (order < MAX_ORDER - 1) {
             order++;
-            if (info->freeSpaces[order]) {
-                addFreeSpace(ptr, info, requiredSize, );
+            if (info->freeSpaces[order] != -1) {
+                printf("Divide space: %d, %d\n", info->freeSpaces[order], order);
+                divideSpace(ptr, info, info->freeSpaces[order], order);
+                order = getOrderFromSize(requiredSize);
             }
         } else {
             break;
         }
     }
 
-
-    if (offset == NULL) {
-        // Since we assume that alloc is not called before calling open, this must be process that calls init
-        printf("%d %d\n", size,getOrderFromSize(size));
-
-    }
-    // TODO Find a location with buddy algorithm (For example (32,63))
-
-    //unmap the ptr 
-    int success = munmap(ptr, info->size); 
-    if(success == -1){
-        printf("sbmem_alloc: unmapping cannot be done successfully!\n");
-    }
+    printInfo(info);
 
     // TODO Signal semaphore
     sem_post(sem);
-    return offset; // + 32
+    return (offset + offsetOfSpace + (int)sizeof(struct spaceInformation)); // + 32
 }
 
+int find_buddy(int offset, int order){
+    int mod = offset % (int)pow(2,order+1);
+    if(mod == 0){
+        return offset + (int)pow(2,order);
+    }else{
+        return offset - (int)pow(2,order);
+    }
+}
 
 void sbmem_free(void *p)
 {
     // TODO Wait semaphore
     sem_wait(sem);
 
+    void *ptr = getMMapForSegment();
+    struct sbmemInformation* info = (struct sbmemInformation*)ptr;
+
+    void* offset = NULL;
+    for (int i = 0; i < MAX_PROCESS_COUNT; ++i) {
+        if (info->processes[i].pid == getpid()) {
+            offset = info->processes[i].offset;
+            break;
+        }
+    }
+
+    struct spaceInformation* spaceInfo = (struct spaceInformation*)(p - sizeof(struct spaceInformation));
+
+    int buddyOffset = find_buddy(p - offset - sizeof(struct spaceInformation), spaceInfo->order);
+
     //Post Semaphore
     sem_post(sem);
- 
+
 }
 
 int sbmem_close()
 {
     sem_wait(sem);
     pid_t closedProcessID = getpid();
-    
+
     void* ptr = getMMapForSegment();
     struct sbmemInformation* info = (struct sbmemInformation*)ptr;
 
@@ -249,30 +341,20 @@ int sbmem_close()
         printf("The process is not already using the library!\n");
         return -1;
     }
-    
+
     info->processes[closedProcessIndex].pid = -1;
     int ret = munmap(info->processes[closedProcessIndex].offset, info->size);
     if(ret == -1){
         printf("sbmem_close: unmapping for specified process cannot be done successfully!\n");
     }
-    
+
 
     //unmap the ptr
-    int success = munmap(ptr, info->size); 
+    int success = munmap(ptr, info->size);
     if(success == -1){
         printf("sbmem_close: ptr unmapping cannot be done successfully!\n");
     }
     sem_post(sem);
     sem_close(sem);
-    return (0); 
-}
-
-
-int find_buddy(int offset, int level ){
-    int mod = offset % (int)pow(2,level+1);
-    if(mod == 0){
-        return offset + (int)pow(2,level);
-    }else{
-        return offset - (int)pow(2,level);
-    }
+    return (0);
 }

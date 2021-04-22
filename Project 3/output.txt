@@ -1,0 +1,30 @@
+Internal fragmentation: 601
+ALlocating 1447 bytes
+
+Internal fragmentation: 1248
+ALlocating 2848 bytes
+
+Internal fragmentation: 663
+ALlocating 3433 bytes
+
+Internal fragmentation: 977
+ALlocating 3119 bytes
+
+Internal fragmentation: 538
+ALlocating 1510 bytes
+
+Internal fragmentation: 396
+ALlocating 1652 bytes
+
+Internal fragmentation: 446
+ALlocating 1602 bytes
+
+Internal fragmentation: 278
+ALlocating 1770 bytes
+
+Internal fragmentation: 834
+ALlocating 1214 bytes
+
+Internal fragmentation: 553
+ALlocating 1495 bytes
+

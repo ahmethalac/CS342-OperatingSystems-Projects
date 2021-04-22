@@ -100,7 +100,6 @@ int sbmem_remove()
         exit(1);
     }
 
-    sem_wait(sem);
     shm_unlink(NAME);
     sem_unlink(SEM_NAME);
     return (0);
@@ -245,6 +244,10 @@ void *sbmem_alloc (int size)
     int found = 0;
     int offsetOfSpace = -1;
     int order = getOrderFromSize(requiredSize);
+
+    //Experiment
+    FILE *output = fopen("output.txt", "a");
+    fprintf(output, "Internal fragmentation: %d\n", (int)pow(2, order) - size);
 
     while (found == 0) {
         if (info->freeSpaces[order] != -1) {

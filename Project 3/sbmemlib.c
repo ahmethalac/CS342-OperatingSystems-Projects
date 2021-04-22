@@ -8,6 +8,7 @@
 
 #define NAME "/sbmem"
 #define MAX_PROCESS_COUNT 10
+#define MAX_ORDER 19
 
 // TODO Define semaphore
 
@@ -17,11 +18,23 @@ struct process {
     void* offset;
 };
 
+struct spaceInformation {
+    int nextFreeLocation;
+    int size;
+    int is_allocated;
+};
+
 struct sbmemInformation {
+    struct spaceInformation dummyInformation; // To ease buddy algorithm
     int size;
     struct process processes[MAX_PROCESS_COUNT];
     // TODO Define buddy algorithm structures
+    int freeSpaces[MAX_ORDER];
 };
+
+int getOrderFromSize(int segmentsize) {
+    return ceil((int)(log2((double)segmentsize)));
+}
 
 int sbmem_init(int segmentsize)
 {
@@ -49,10 +62,18 @@ int sbmem_init(int segmentsize)
     }
 
     // TODO Initialize buddy algorithm structures
+    printf("%d\n", getOrderFromSize(segmentsize));
+    for (int i = 0; i < MAX_ORDER; ++i) {
+        if (i == getOrderFromSize(segmentsize)) {
+            info->freeSpaces[i] = 0;
+            continue;
+        }
+        info->freeSpaces[i] = -1;
+    }
 
     sbmem_alloc(sizeof(struct sbmemInformation));
     printf("sbmem init called\n"); // remove all printfs when you are submitting to us.
-    return (0); 
+    return 0;
 }
 
 int sbmem_remove()
@@ -100,6 +121,15 @@ int sbmem_open()
     return 0;
 }
 
+int extractFreeSpace(void* sbmemPtr, struct sbmemInformation* info, int size, int order, void* offset) {
+    int result = info->freeSpaces[order];
+    info->freeSpaces[order] = *(sbmemPtr + info->freeSpaces[order]);
+    return offset == NULL ? result : result + sizeof(struct spaceInformation);
+}
+
+void addFreeSpace(void* sbmemPtr, struct sbmemInformation* info, int size, int offset, int order) {
+
+}
 
 void *sbmem_alloc (int size)
 {
@@ -115,10 +145,37 @@ void *sbmem_alloc (int size)
         }
     }
 
+    if (offset != NULL) {
+        printf("%p %p", ptr, offset);
+    }
+    int requiredSize = offset == NULL ? size : size + sizeof(struct spaceInformation);
+    int found = 0;
+    int offsetOfSpace = -1;
+    int order = getOrderFromSize(requiredSize);
+    while (found == 0) {
+        if (info->freeSpaces[order]) {
+            offsetOfSpace = extractFreeSpace(ptr, info, requiredSize, order, offset);
+            found = 1;
+        } else if (order < MAX_ORDER) {
+            order++;
+            if (info->freeSpaces[order]) {
+                addFreeSpace(ptr, info, requiredSize, );
+            }
+        } else {
+            break;
+        }
+    }
+
+
+    if (offset == NULL) {
+        // Since we assume that alloc is not called before calling open, this must be process that calls init
+        printf("%d %d\n", size,getOrderFromSize(size));
+
+    }
     // TODO Find a location with buddy algorithm (For example (32,63))
 
     // TODO Signal semaphore
-    return 0; // + 32
+    return offset; // + 32
 }
 
 

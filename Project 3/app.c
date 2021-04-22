@@ -14,7 +14,6 @@ int main()
     if (ret == -1)
 	exit (1); 
 
-    return 0;
     p = sbmem_alloc (256); // allocate space to hold 1024 characters
     for (i = 0; i < 256; ++i)
 	p[i] = 'a'; // init all chars to ‘a’

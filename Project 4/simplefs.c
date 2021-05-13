@@ -208,15 +208,6 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     }
     */
 
-   //Initalize the open file table
-   openFiles = malloc(sizeof(openFileTable));
-   for(int i = 0; i < 16; ++i){
-       openFiles->entries[i].currentPointer = 0;
-       openFiles->entries[i].fcbIndex = -1;
-       openFiles->entries[i].mode = -1;
-       openFiles->entries[i].fileSize = 0;
-   }
-
     sfs_umount();
     return (0);
 }
@@ -229,6 +220,14 @@ int sfs_mount (char *vdiskname)
     // way make it ready to be used for other operations.
     // vdisk_fd is global; hence other function can use it.
     vdisk_fd = open(vdiskname, O_RDWR);
+    //Initalize the open file table
+    openFiles = malloc(sizeof(openFileTable));
+    for(int i = 0; i < 16; ++i){
+        openFiles->entries[i].currentPointer = 0;
+        openFiles->entries[i].fcbIndex = -1;
+        openFiles->entries[i].mode = -1;
+        openFiles->entries[i].fileSize = 0;
+    }
     return(0);
 }
 
@@ -373,7 +372,7 @@ int sfs_open(char *file, int mode)
             break;
         }
     }
-    
+
     //If there is an empty location in open file table
     if(openFileIndex != -1){
         int isFound = 0;
@@ -390,17 +389,24 @@ int sfs_open(char *file, int mode)
                     //Getting the file size from the fcb
                     int blockNo = block->entries[j].fcbIndex / 32;
                     int offsetInBlock = block->entries[j].fcbIndex % 32;
-                    FCBTable* fcbBlock = (FCBTable*)malloc(sizeof(BLOCKSIZE));
+
+                    FCBTable* fcbBlock = (FCBTable*)malloc(BLOCKSIZE);
                     read_block(fcbBlock, blockNo + 9);
                     openFiles->entries[openFileIndex].fileSize = fcbBlock->fcbs[offsetInBlock].fileSize;
+
                     //Assign the attributes for opened file into the open file table
                     openFiles->entries[openFileIndex].fcbIndex = block->entries[j].fcbIndex;
                     openFiles->entries[openFileIndex].mode = mode;
                     openFiles->entries[openFileIndex].currentPointer = 0;
                     free(fcbBlock);
+                    break;
                 }
             }
 
+            free(block);
+            if (isFound == 1) {
+                break;
+            }
         }
         if(isFound == 0){
             printf("There are no file with this name!");

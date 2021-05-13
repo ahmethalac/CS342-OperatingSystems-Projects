@@ -34,6 +34,8 @@ int main(int argc, char **argv)
     sfs_create ("file2.bin");
     sfs_create ("file3.bin");
 
+
+    return 0;
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND);
     for (i = 0; i < 10000; ++i) {

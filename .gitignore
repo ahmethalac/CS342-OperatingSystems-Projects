@@ -14,3 +14,9 @@ Project 3/create_memory_sb
 Project 3/destroy_memory_sb
 Project 3/libsbmemlib.a
 Project 3/sbmemlib.o
+
+Project 4/app
+Project 4/create_format
+Project 4/libsimplefs.a
+Project 4/simplefs.o
+Project 4/test

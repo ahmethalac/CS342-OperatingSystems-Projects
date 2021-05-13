@@ -52,6 +52,7 @@ struct openFileEntryStruct {
     int currentPointer;
     int mode;
     int fileSize;
+    int inodeBlockNumber;
 } typedef openFileEntry;
 
 struct openFileTableStruct {
@@ -227,6 +228,7 @@ int sfs_mount (char *vdiskname)
         openFiles->entries[i].fcbIndex = -1;
         openFiles->entries[i].mode = -1;
         openFiles->entries[i].fileSize = 0;
+        openFiles->entries[i].inodeBlockNumber = -1;
     }
     return(0);
 }
@@ -393,7 +395,7 @@ int sfs_open(char *file, int mode)
                     FCBTable* fcbBlock = (FCBTable*)malloc(BLOCKSIZE);
                     read_block(fcbBlock, blockNo + 9);
                     openFiles->entries[openFileIndex].fileSize = fcbBlock->fcbs[offsetInBlock].fileSize;
-
+                    openFiles->entries[openFileIndex].inodeBlockNumber = fcbBlock->fcbs[offsetInBlock].inodeBlockNumber;
                     //Assign the attributes for opened file into the open file table
                     openFiles->entries[openFileIndex].fcbIndex = block->entries[j].fcbIndex;
                     openFiles->entries[openFileIndex].mode = mode;
@@ -422,12 +424,35 @@ int sfs_open(char *file, int mode)
 }
 
 int sfs_close(int fd){
-    return (0);
+
+    if(openFiles->entries[fd].fcbIndex != -1){
+        int blockNo = openFiles->entries[fd].fcbIndex / 32;
+        int offsetInBlock = openFiles->entries[fd].fcbIndex % 32;
+
+        //Writing fileSize into the FCB before it is closed
+        FCBTable* fcbBlock = (FCBTable*)malloc(BLOCKSIZE);
+        read_block(fcbBlock, blockNo + 9);
+        fcbBlock->fcbs[offsetInBlock].fileSize = openFiles->entries[fd].fileSize;
+
+        //Indicates the specified entry in the open file table is free
+        openFiles->entries[fd].fcbIndex = -1;
+        free(fcbBlock);
+        return 1;
+
+    }else{
+        printf("File is not opened yet!\n");
+        return -1;
+    }
+
 }
 
 int sfs_getsize (int  fd)
 {
-    return (0);
+    if(openFiles->entries[fd].fcbIndex != -1){
+        return openFiles->entries[fd].fileSize;
+    }else{
+        return -1;
+    }
 }
 
 int sfs_read(int fd, void *buf, int n){

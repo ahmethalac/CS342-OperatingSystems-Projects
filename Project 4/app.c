@@ -35,9 +35,11 @@ int main(int argc, char **argv)
     sfs_create ("file3.bin");
 
 
-    return 0;
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND);
+    printf("fd1: %d\n", fd1);
+    printf("fd2: %d\n", fd2);
+    return 0;
     for (i = 0; i < 10000; ++i) {
         buffer[0] =   (char) 65;
         sfs_append (fd1, (void *) buffer, 1);

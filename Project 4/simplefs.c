@@ -51,12 +51,14 @@ struct openFileEntryStruct {
     int fcbIndex;
     int currentPointer;
     int mode;
+    int fileSize;
 } typedef openFileEntry;
 
 struct openFileTableStruct {
     openFileEntry entries[16];
 } typedef openFileTable;
 
+openFileTable* openFiles;
 // ========================================================
 
 
@@ -206,6 +208,15 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     }
     */
 
+   //Initalize the open file table
+   openFiles = malloc(sizeof(openFileTable));
+   for(int i = 0; i < 16; ++i){
+       openFiles->entries[i].currentPointer = 0;
+       openFiles->entries[i].fcbIndex = -1;
+       openFiles->entries[i].mode = -1;
+       openFiles->entries[i].fileSize = 0;
+   }
+
     sfs_umount();
     return (0);
 }
@@ -353,7 +364,55 @@ int sfs_create(char *filename)
 
 int sfs_open(char *file, int mode)
 {
-    return (0);
+    //Finding the empty entry in openFile Table
+    int openFileIndex = -1;
+    for (int i = 0; i < 16; i++)
+    {
+        if(openFiles->entries[i].fcbIndex == -1){
+            openFileIndex = i;
+            break;
+        }
+    }
+    
+    //If there is an empty location in open file table
+    if(openFileIndex != -1){
+        int isFound = 0;
+        //Specifying the FCBindex for a requested file
+        rootDirectory* block;
+        for(int i = 5; i < 9; ++i){
+            block = (rootDirectory*) malloc(BLOCKSIZE);
+            read_block(block, i);
+
+            for(int j = 0; j < 32; ++j){
+                //If the file is found in the directory
+                if(strcmp(block->entries[j].filename, file) == 0){
+                    isFound = 1;
+                    //Getting the file size from the fcb
+                    int blockNo = block->entries[j].fcbIndex / 32;
+                    int offsetInBlock = block->entries[j].fcbIndex % 32;
+                    FCBTable* fcbBlock = (FCBTable*)malloc(sizeof(BLOCKSIZE));
+                    read_block(fcbBlock, blockNo + 9);
+                    openFiles->entries[openFileIndex].fileSize = fcbBlock->fcbs[offsetInBlock].fileSize;
+                    //Assign the attributes for opened file into the open file table
+                    openFiles->entries[openFileIndex].fcbIndex = block->entries[j].fcbIndex;
+                    openFiles->entries[openFileIndex].mode = mode;
+                    openFiles->entries[openFileIndex].currentPointer = 0;
+                    free(fcbBlock);
+                }
+            }
+
+        }
+        if(isFound == 0){
+            printf("There are no file with this name!");
+            return -1;
+        }
+    }else{
+        printf("There are already 16 files in the system!");
+        return -1;
+    }
+
+    //Return the index on the open allocation table as a file descriptor
+    return openFileIndex;
 }
 
 int sfs_close(int fd){

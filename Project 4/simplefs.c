@@ -100,11 +100,9 @@ int write_block (void *block, int k)
     return 0;
 }
 
-
-/**********************************************************************
-   The following functions are to be called by applications directly.
-***********************************************************************/
-
+/*********************
+   Helper functions
+*********************/
 void setBit(char* bitmapBlock, int offset, int value) {
     int charIndex = offset / 8;
     int bitOffset = offset % 8;
@@ -144,6 +142,27 @@ int occupyEmptyBlock() {
     }
     return -1;
 }
+
+void freeBlock(int blockNumber){
+    // TODO: Add one line information prompt
+    int bitmapBlockNo = blockNumber / 32768 + 1;
+    int bitmapBlockOffset = blockNumber % 32768;
+    char bitmapBlock[4096];
+    read_block(bitmapBlock, bitmapBlockNo);
+    setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
+    write_block(bitmapBlock, bitmapBlockNo);
+
+
+    superblock* metadata = (superblock*)malloc(BLOCKSIZE);
+    read_block(metadata, 0);
+    metadata->freeBlockCount += 1;
+    write_block(metadata, 0);
+    free(metadata);
+}
+
+/**********************************************************************
+   The following functions are to be called by applications directly.
+***********************************************************************/
 
 // this function is partially implemented.
 int create_format_vdisk (char *vdiskname, unsigned int m)
@@ -582,23 +601,6 @@ int sfs_append(int fd, void *buf, int n)
     openFiles->entries[fd].fileSize += n;
 
     return n;
-}
-
-void freeBlock(int blockNumber){
-    // TODO: Add one line information prompt
-    int bitmapBlockNo = blockNumber / 32768 + 1;
-    int bitmapBlockOffset = blockNumber % 32768;
-    char bitmapBlock[4096];
-    read_block(bitmapBlock, bitmapBlockNo);
-    setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
-    write_block(bitmapBlock, bitmapBlockNo);
-
-
-    superblock* metadata = (superblock*)malloc(BLOCKSIZE);
-    read_block(metadata, 0);
-    metadata->freeBlockCount += 1;
-    write_block(metadata, 0);
-    free(metadata);
 }
 
 int sfs_delete(char *filename)

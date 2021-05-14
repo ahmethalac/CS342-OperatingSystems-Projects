@@ -477,14 +477,17 @@ int sfs_getsize (int  fd)
 
 int sfs_read(int fd, void *buf, int n){
     if (openFiles->entries[fd].fcbIndex == -1) {
+        printf("There is no open file with this fd\n");
         return -1;
     }
 
     if (openFiles->entries[fd].mode == MODE_APPEND) {
+        printf("Mode is append! You cannot read\n");
         return -1;
     }
 
     if (openFiles->entries[fd].currentPointer >= openFiles->entries[fd].fileSize) {
+        printf("End of file\n");
         return -1;
     }
 
@@ -520,21 +523,25 @@ int sfs_read(int fd, void *buf, int n){
 int sfs_append(int fd, void *buf, int n)
 {
     if (openFiles->entries[fd].fcbIndex == -1) {
+        printf("There is no open file with this fd\n");
         return -1;
     }
     if (openFiles->entries[fd].mode == MODE_READ) {
+        printf("Mode is read! You cannot append\n");
         return -1;
     }
     superblock* metadata = (superblock*) malloc(BLOCKSIZE);
     read_block(metadata, 0);
 
     if (metadata->freeBlockCount * BLOCKSIZE < n) {
+        printf("There is not enough blocks to write %d bytes", n);
         free(metadata);
         return -1;
     }
     free(metadata);
 
     if (openFiles->entries[fd].currentPointer + n >= MAX_FILE_SIZE) {
+        printf("Max file size is reached\n");
         return -1;
     }
 

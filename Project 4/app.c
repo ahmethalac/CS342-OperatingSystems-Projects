@@ -38,23 +38,27 @@ int main(int argc, char **argv)
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND);
 
+    printf("Start writing\n");
     for (i = 0; i < 500; ++i) {
         buffer = "denemetest";
         sfs_append(fd1, (void *) buffer, 10);
     }
-
+    printf("End writing. Updated file size: %d\n", sfs_getsize(fd1));
     sfs_close(fd1);
+
+    printf("Start writing\n");
     sfs_open("file1.bin", MODE_APPEND);
     for (i = 0; i < 500; ++i) {
         buffer = "testdeneme";
         sfs_append (fd1, (void *) buffer, 10);
     }
+    printf("End writing. Updated file size: %d\n", sfs_getsize(fd1));
 
     sfs_close(fd1);
     sfs_open("file1.bin", MODE_READ);
 
     char x[10];
-    for (i = 0; i < 1000; ++i) {
+    for (i = 0; i < 1001; ++i) {
         if (sfs_read(fd1, x, 10) == -1) {
             printf("Cannot read\n");
             break;

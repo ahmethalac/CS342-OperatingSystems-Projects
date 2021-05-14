@@ -470,7 +470,7 @@ int sfs_close(int fd){
         //Indicates the specified entry in the open file table is free
         openFiles->entries[fd].fcbIndex = -1;
         free(fcbBlock);
-        return 1;
+        return 0;
 
     }else{
         printf("File is not opened yet!\n");

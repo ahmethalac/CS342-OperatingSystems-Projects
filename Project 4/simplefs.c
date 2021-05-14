@@ -592,8 +592,77 @@ int sfs_append(int fd, void *buf, int n)
     return n;
 }
 
+void freeBlock(int blockNumber){
+        int bitmapBlockNo = blockNumber / 32768;
+        int bitmapBlockOffset = blockNumber % 32768;
+        char bitmapBlock[4096];
+        read_block(bitmapBlock, bitmapBlockNo);
+        setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
+        write_block(bitmapBlock, bitmapBlockNo);
+        superblock* metadata = (superblock*)malloc(BLOCKSIZE);
+        read_block(metadata, 0);
+        metadata->freeBlockCount += 1;
+        write_block(metadata, 0);
+        free(metadata);
+}
+
 int sfs_delete(char *filename)
 {
+    int deletedFCBIndex = -1;
+
+    //Finding the directory entry
+    rootDirectory* block;
+    for(int i = 5; i < 9; ++i){
+        //Search fir ith block
+        block = (rootDirectory*) malloc(BLOCKSIZE);
+        read_block(block, i);
+
+        for(int j = 0; j < 32; ++j){
+            //If the filename is found in the directory entry
+            if(strcmp(block->entries[j].filename, filename) == 0){
+                deletedFCBIndex = block->entries[j].fcbIndex;
+                block->entries[j].fcbIndex = -1;
+                strcpy(block->entries[j].filename, "");
+                write_block(block, i);
+                break;
+            }
+        }
+        free(block);
+    }
+
+    if(deletedFCBIndex != -1){ //There is a file with this name in the root directory
+        //Finding block number and block offset for given FCB index
+        int fcbBlockNo = deletedFCBIndex / 32;
+        int fcbBlockOffset = deletedFCBIndex % 32;
+        FCBTable* fcbBlock = (FCBTable*)malloc(BLOCKSIZE);
+        read_block(fcbBlock, fcbBlockNo + 9);
+        int inodeBlockNumber = fcbBlock->fcbs[fcbBlockOffset].inodeBlockNumber;
+
+        freeBlock(inodeBlockNumber);        
+
+        //If the space is not allocated for a file yet
+        if(fcbBlock->fcbs[fcbBlockOffset].fileSize != 0){
+            inode* inodeTable = (inode*)malloc(BLOCKSIZE);
+            read_block(inodeTable, inodeBlockNumber);
+            for(int i = 0; i < 1024; ++i){
+                if(inodeTable->blockNumbers[i] == 0){
+                    break;
+                }
+                freeBlock(inodeTable->blockNumbers[i]);
+            }
+            free(inodeTable);
+        }
+        fcbBlock->fcbs[fcbBlockOffset].used = 0;
+        fcbBlock->fcbs[fcbBlockOffset].fileSize = 0;
+        write_block(fcbBlock, fcbBlockNo + 9);
+
+        free(fcbBlock);
+    }else{ //There is no file with this name in the directory
+        printf("There is no file with this name in the directory!");
+        return -1;
+    }
+
     return (0);
 }
+
 

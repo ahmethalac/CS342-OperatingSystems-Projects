@@ -8,7 +8,7 @@
 #include "simplefs.h"
 #include <string.h>
 
-
+#define MAX_FILE_SIZE 4194304
 // Global Variables =======================================
 int vdisk_fd; // Global virtual disk file descriptor. Global within the library.
               // Will be assigned with the vsfs_mount call.
@@ -17,6 +17,8 @@ int vdisk_fd; // Global virtual disk file descriptor. Global within the library.
 
 struct superblockStruct {
     int noOfBlocks;
+    int freeBlockCount;
+    char emptySpace[4088];
 } typedef superblock;
 
 
@@ -117,6 +119,23 @@ int getBit(char* bitmapBlock, int offset) {
     return (bitmapBlock[charIndex] >> bitOffset)&1U;
 }
 
+int findEmptyBlock() {
+    char bitmapBlock[4096];
+    for (int k = 1; k < 5; ++k) {
+        read_block(bitmapBlock, k);
+
+        for (int l = 0; l < 32768; ++l) {
+            if (getBit(bitmapBlock, l) == 1) {
+                setBit(bitmapBlock, l, 0);
+                write_block(bitmapBlock, k);
+
+                return (k - 1) * 32768 + l;
+            }
+        }
+    }
+    return -1;
+}
+
 // this function is partially implemented.
 int create_format_vdisk (char *vdiskname, unsigned int m)
 {
@@ -137,6 +156,7 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     // Initialize superblock
     superblock* info = (superblock*)malloc(sizeof(superblock));
     info->noOfBlocks = count;
+    info->freeBlockCount = count - 13;
     write_block(info, 0);
     free(info);
 
@@ -248,7 +268,6 @@ int sfs_create(char *filename)
     superblock* metadata = (superblock*) malloc(BLOCKSIZE);
     read_block(metadata, 0);
     int noOfBlocks = metadata->noOfBlocks;
-    free(metadata);
 
 
     int foundBlockNumber = -1;
@@ -318,6 +337,8 @@ int sfs_create(char *filename)
                                 setBit(bitmapBlock, l, 0);
                                 write_block(bitmapBlock, k);
 
+                                metadata->freeBlockCount = metadata->freeBlockCount - 1;
+                                write_block(metadata, 0);
                                 break;
                             }
                             currentBlockIndex++;
@@ -341,6 +362,9 @@ int sfs_create(char *filename)
                 break;
             }
         }
+
+        read_block(metadata, 0);
+        free(metadata);
 
         if (foundFCBIndex != -1) {
             block = (rootDirectory*) malloc(sizeof(rootDirectory));
@@ -433,6 +457,7 @@ int sfs_close(int fd){
         FCBTable* fcbBlock = (FCBTable*)malloc(BLOCKSIZE);
         read_block(fcbBlock, blockNo + 9);
         fcbBlock->fcbs[offsetInBlock].fileSize = openFiles->entries[fd].fileSize;
+        write_block(fcbBlock, blockNo + 9);
 
         //Indicates the specified entry in the open file table is free
         openFiles->entries[fd].fcbIndex = -1;
@@ -456,13 +481,107 @@ int sfs_getsize (int  fd)
 }
 
 int sfs_read(int fd, void *buf, int n){
-    return (0);
-}
+    if (openFiles->entries[fd].fcbIndex == -1) {
+        return -1;
+    }
 
+    if (openFiles->entries[fd].mode == MODE_APPEND) {
+        return -1;
+    }
+
+    if (openFiles->entries[fd].currentPointer >= openFiles->entries[fd].fileSize) {
+        return -1;
+    }
+
+    int readCount = n;
+    if (openFiles->entries[fd].currentPointer + n > openFiles->entries[fd].fileSize) { // Overflow
+        readCount = openFiles->entries[fd].fileSize - openFiles->entries[fd].currentPointer;
+    }
+
+    inode* inodeTable = (inode*) malloc(BLOCKSIZE);
+    read_block(inodeTable,openFiles->entries[fd].inodeBlockNumber);
+
+    int blockIndex = openFiles->entries[fd].currentPointer / BLOCKSIZE;
+    int blockOffset = openFiles->entries[fd].currentPointer % BLOCKSIZE;
+
+
+    char blockContent[4096];
+    read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
+
+    for (int i = 0; i < readCount; ++i) {
+        sprintf(buf, "%c", blockContent[blockOffset]);
+        blockOffset++;
+
+        if (blockOffset == BLOCKSIZE) {
+            blockOffset = 0;
+            blockIndex++;
+            read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
+        }
+    }
+    openFiles->entries[fd].currentPointer = openFiles->entries[fd].currentPointer + readCount;
+    return readCount;
+}
 
 int sfs_append(int fd, void *buf, int n)
 {
-    return (0);
+    if (openFiles->entries[fd].fcbIndex == -1) {
+        return -1;
+    }
+    if (openFiles->entries[fd].mode == MODE_READ) {
+        return -1;
+    }
+    superblock* metadata = (superblock*) malloc(BLOCKSIZE);
+    read_block(metadata, 0);
+
+    if (metadata->freeBlockCount * BLOCKSIZE < n) {
+        free(metadata);
+        return -1;
+    }
+    if (openFiles->entries[fd].currentPointer + n >= MAX_FILE_SIZE) {
+        return -1;
+    }
+
+    inode* inodeTable = (inode*) malloc(BLOCKSIZE);
+    read_block(inodeTable,openFiles->entries[fd].inodeBlockNumber);
+
+    if (openFiles->entries[fd].fileSize == 0) {
+        int blockNumber = findEmptyBlock();
+        inodeTable->blockNumbers[0] = blockNumber;
+        write_block(inodeTable, openFiles->entries[fd].inodeBlockNumber);
+    }
+
+    int blockIndex = openFiles->entries[fd].currentPointer / BLOCKSIZE;
+    int blockOffset = openFiles->entries[fd].currentPointer % BLOCKSIZE;
+
+    char blockContent[4096];
+    read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
+
+    for (int i = 0; i < n; ++i) {
+        strcpy(&(blockContent[blockOffset]), &(((char*)buf)[i]));
+        blockOffset++;
+
+        if (blockOffset == BLOCKSIZE) {
+            write_block(blockContent, inodeTable->blockNumbers[blockIndex]);
+            blockOffset = 0;
+            blockIndex++;
+
+            int blockNumber = findEmptyBlock();
+            inodeTable->blockNumbers[blockIndex] = blockNumber;
+            write_block(inodeTable, openFiles->entries[fd].inodeBlockNumber);
+
+            metadata->freeBlockCount = metadata->freeBlockCount - 1;
+            write_block(metadata, 0);
+
+            read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
+        }
+    }
+    write_block(blockContent, inodeTable->blockNumbers[blockIndex]);
+
+    openFiles->entries[fd].currentPointer += n;
+    openFiles->entries[fd].fileSize += n;
+
+    read_block(metadata, 0);
+    return n;
 }
 
 int sfs_delete(char *filename)

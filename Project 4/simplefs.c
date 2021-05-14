@@ -331,8 +331,16 @@ int sfs_create(char *filename)
                                 printf("Empty block is found from bitmap with number %d\n", 32768 * (k - 1) + l);
                                 fcbBlock->fcbs[j].used = 1;
                                 fcbBlock->fcbs[j].inodeBlockNumber = 32768 * (k - 1) + l;
+                                fcbBlock->fcbs[j].fileSize = 0;
 
                                 write_block(fcbBlock, i);
+
+                                inode* inodeTable = (inode*) malloc(BLOCKSIZE);
+                                for (int m = 0; m < 1024; ++m) {
+                                    inodeTable->blockNumbers[m] = 0;
+                                }
+                                write_block(inodeTable, fcbBlock->fcbs[j].inodeBlockNumber);
+                                free(inodeTable);
 
                                 setBit(bitmapBlock, l, 0);
                                 write_block(bitmapBlock, k);

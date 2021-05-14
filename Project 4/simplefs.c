@@ -119,7 +119,7 @@ int getBit(char* bitmapBlock, int offset) {
     return (bitmapBlock[charIndex] >> bitOffset)&1U;
 }
 
-int findEmptyBlock() {
+int occupyEmptyBlock() {
     char bitmapBlock[4096];
     for (int k = 1; k < 5; ++k) {
         read_block(bitmapBlock, k);
@@ -129,6 +129,15 @@ int findEmptyBlock() {
                 setBit(bitmapBlock, l, 0);
                 write_block(bitmapBlock, k);
 
+                superblock* metadata = (superblock*) malloc(BLOCKSIZE);
+                read_block(metadata, 0);
+                metadata->freeBlockCount -= 1;
+                write_block(metadata, 0);
+
+                printf("%dth block is occupied! New free block count is: %d\n",
+                       (k - 1) * 32768 + l, metadata->freeBlockCount);
+
+                free(metadata);
                 return (k - 1) * 32768 + l;
             }
         }
@@ -145,11 +154,9 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     int count;
     size  = num << m;
     count = size / BLOCKSIZE;
-    //    printf ("%d %d", m, size);
-    sprintf (command, "dd if=/dev/zero of=%s bs=%d count=%d",
+    sprintf(command, "dd if=/dev/zero of=%s bs=%d count=%d",
              vdiskname, BLOCKSIZE, count);
-    //printf ("executing command = %s\n", command);
-    system (command);
+    system(command);
 
     sfs_mount(vdiskname);
 
@@ -169,19 +176,13 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     write_block(bitmap, 3);
     write_block(bitmap, 4);
 
+    // Set first 13 bit to 0 since we use them
     for (int i = 0; i < 13; ++i) {
         setBit(bitmap, i, 0);
     }
     write_block(bitmap, 1);
 
-    /*
-    for (int i = 0; i < 4096; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            printf("%d", selectBit(x[i], j));
-        }
-    }
-     */
-
+    // Initialize root directory
     rootDirectory* rootDirectory = malloc(sizeof(rootDirectory));
     for (int i = 0; i < 32; ++i) {
         strcpy(rootDirectory->entries[i].filename, "");
@@ -191,20 +192,9 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     write_block(rootDirectory, 6);
     write_block(rootDirectory, 7);
     write_block(rootDirectory, 8);
-
     free(rootDirectory);
-    /*
-    directoryEntry* x = malloc(sizeof(rootDirectory));
-    read_block(x, 5);
-    for (int i = 0; i < 32; ++i) {
-        printf("filename: %s, index: %d\n",
-               x->filename,
-               x->fcbIndex);
-        x++;
-    }
-     */
 
-
+    // Initialize FCB Table
     FCBTable* fcbTable = malloc(sizeof(FCBTable));
     for (int i = 0; i < 32; ++i) {
         fcbTable->fcbs[i].fileSize = 0;
@@ -215,19 +205,7 @@ int create_format_vdisk (char *vdiskname, unsigned int m)
     write_block(fcbTable, 10);
     write_block(fcbTable, 11);
     write_block(fcbTable, 12);
-
     free(fcbTable);
-    /*
-    FCB* x = malloc(sizeof(FCBTable));
-    read_block(x, 9);
-    for (int i = 0; i < 32; ++i) {
-        printf("filesize: %d, inode: %d, used: %d\n",
-               x->fileSize,
-               x->inodeBlockNumber,
-               x->used);
-        x++;
-    }
-    */
 
     sfs_umount();
     return (0);
@@ -265,13 +243,13 @@ int sfs_umount ()
 
 int sfs_create(char *filename)
 {
+    printf("Create %s\n", filename);
     superblock* metadata = (superblock*) malloc(BLOCKSIZE);
     read_block(metadata, 0);
     int noOfBlocks = metadata->noOfBlocks;
 
-
-    int foundBlockNumber = -1;
-    int foundOffset = -1;
+    int foundBlockNumber = -1; // Block number of found directory entry
+    int foundOffset = -1; // Block offset of found directory entry
     int alreadyAllocated = 0;
 
     // Search empty directory table
@@ -285,15 +263,13 @@ int sfs_create(char *filename)
             if (block->entries[j].fcbIndex == -1
                 && foundBlockNumber == -1 && foundOffset == -1) {
                 // First empty directory entry is found
-                printf("First empty directory found! blockNumber: %d, offset: %d\n",
-                       i,j);
                 foundBlockNumber = i;
                 foundOffset = j;
             }
             if (strcmp(block->entries[j].filename, filename) == 0) {
                 // Filename already exists in root directory
-                printf("Filename is already exists in block %d, offset %d\n", i, j);
                 alreadyAllocated = 1;
+                printf("%s already exists in root directory\n", filename);
                 break;
             }
         }
@@ -317,7 +293,6 @@ int sfs_create(char *filename)
                 if (fcbBlock->fcbs[j].used == 0) {
                     // Empty FCB is found
 
-                    printf("Unused FCB found in block %d, offset %d\n", i, j);
                     // Search for empty block in bitmap
                     char bitmapBlock[4096];
                     int currentBlockIndex = 0;
@@ -328,13 +303,13 @@ int sfs_create(char *filename)
                             if (getBit(bitmapBlock, l) == 1) {
                                 foundFCBIndex = 32 * (i - 9) + j;
 
-                                printf("Empty block is found from bitmap with number %d\n", 32768 * (k - 1) + l);
+                                printf("%dth FCB entry is used\n", foundFCBIndex);
                                 fcbBlock->fcbs[j].used = 1;
                                 fcbBlock->fcbs[j].inodeBlockNumber = 32768 * (k - 1) + l;
                                 fcbBlock->fcbs[j].fileSize = 0;
-
                                 write_block(fcbBlock, i);
 
+                                printf("%dth block is occupied for inode\n", 32768 * (k - 1) + l);
                                 inode* inodeTable = (inode*) malloc(BLOCKSIZE);
                                 for (int m = 0; m < 1024; ++m) {
                                     inodeTable->blockNumbers[m] = 0;
@@ -347,6 +322,8 @@ int sfs_create(char *filename)
 
                                 metadata->freeBlockCount = metadata->freeBlockCount - 1;
                                 write_block(metadata, 0);
+                                printf("New free block count: %d\n", metadata->freeBlockCount);
+
                                 break;
                             }
                             currentBlockIndex++;
@@ -380,9 +357,9 @@ int sfs_create(char *filename)
 
             strcpy(block->entries[foundOffset].filename, filename);
             block->entries[foundOffset].fcbIndex = foundFCBIndex;
+            printf("%dth directory entry is used\n", 32 * (foundBlockNumber - 5) + foundOffset);
 
             write_block(block, foundBlockNumber);
-
             free(block);
 
             return 0;
@@ -391,7 +368,8 @@ int sfs_create(char *filename)
         }
 
     }
-    return (0);
+    printf("There is no empty directory entry in root directory\n");
+    return -1;
 }
 
 
@@ -431,7 +409,16 @@ int sfs_open(char *file, int mode)
                     //Assign the attributes for opened file into the open file table
                     openFiles->entries[openFileIndex].fcbIndex = block->entries[j].fcbIndex;
                     openFiles->entries[openFileIndex].mode = mode;
-                    openFiles->entries[openFileIndex].currentPointer = 0;
+
+                    if (mode == MODE_APPEND) {
+                        openFiles->entries[openFileIndex].currentPointer = fcbBlock->fcbs[offsetInBlock].fileSize;
+                    } else {
+                        openFiles->entries[openFileIndex].currentPointer = 0;
+                    }
+
+                    printf("%s is opened. Mode is %d. Current pointer is: %d. Related FCB index is: %d. fd: %d\n",
+                           file, mode, openFiles->entries[openFileIndex].currentPointer,
+                           openFiles->entries[openFileIndex].fcbIndex, openFileIndex);
                     free(fcbBlock);
                     break;
                 }
@@ -456,7 +443,7 @@ int sfs_open(char *file, int mode)
 }
 
 int sfs_close(int fd){
-
+    // TODO: Add one line information prompt
     if(openFiles->entries[fd].fcbIndex != -1){
         int blockNo = openFiles->entries[fd].fcbIndex / 32;
         int offsetInBlock = openFiles->entries[fd].fcbIndex % 32;
@@ -517,7 +504,7 @@ int sfs_read(int fd, void *buf, int n){
     read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
 
     for (int i = 0; i < readCount; ++i) {
-        sprintf(buf, "%c", blockContent[blockOffset]);
+        sprintf(&(((char*)buf)[i]), "%c", blockContent[blockOffset]);
         blockOffset++;
 
         if (blockOffset == BLOCKSIZE) {
@@ -545,6 +532,8 @@ int sfs_append(int fd, void *buf, int n)
         free(metadata);
         return -1;
     }
+    free(metadata);
+
     if (openFiles->entries[fd].currentPointer + n >= MAX_FILE_SIZE) {
         return -1;
     }
@@ -553,7 +542,7 @@ int sfs_append(int fd, void *buf, int n)
     read_block(inodeTable,openFiles->entries[fd].inodeBlockNumber);
 
     if (openFiles->entries[fd].fileSize == 0) {
-        int blockNumber = findEmptyBlock();
+        int blockNumber = occupyEmptyBlock();
         inodeTable->blockNumbers[0] = blockNumber;
         write_block(inodeTable, openFiles->entries[fd].inodeBlockNumber);
     }
@@ -573,12 +562,9 @@ int sfs_append(int fd, void *buf, int n)
             blockOffset = 0;
             blockIndex++;
 
-            int blockNumber = findEmptyBlock();
+            int blockNumber = occupyEmptyBlock();
             inodeTable->blockNumbers[blockIndex] = blockNumber;
             write_block(inodeTable, openFiles->entries[fd].inodeBlockNumber);
-
-            metadata->freeBlockCount = metadata->freeBlockCount - 1;
-            write_block(metadata, 0);
 
             read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
         }
@@ -588,26 +574,29 @@ int sfs_append(int fd, void *buf, int n)
     openFiles->entries[fd].currentPointer += n;
     openFiles->entries[fd].fileSize += n;
 
-    read_block(metadata, 0);
     return n;
 }
 
 void freeBlock(int blockNumber){
-        int bitmapBlockNo = blockNumber / 32768;
-        int bitmapBlockOffset = blockNumber % 32768;
-        char bitmapBlock[4096];
-        read_block(bitmapBlock, bitmapBlockNo);
-        setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
-        write_block(bitmapBlock, bitmapBlockNo);
-        superblock* metadata = (superblock*)malloc(BLOCKSIZE);
-        read_block(metadata, 0);
-        metadata->freeBlockCount += 1;
-        write_block(metadata, 0);
-        free(metadata);
+    // TODO: Add one line information prompt
+    int bitmapBlockNo = blockNumber / 32768 + 1;
+    int bitmapBlockOffset = blockNumber % 32768;
+    char bitmapBlock[4096];
+    read_block(bitmapBlock, bitmapBlockNo);
+    setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
+    write_block(bitmapBlock, bitmapBlockNo);
+
+
+    superblock* metadata = (superblock*)malloc(BLOCKSIZE);
+    read_block(metadata, 0);
+    metadata->freeBlockCount += 1;
+    write_block(metadata, 0);
+    free(metadata);
 }
 
 int sfs_delete(char *filename)
 {
+    // TODO: Add one line information prompt
     int deletedFCBIndex = -1;
 
     //Finding the directory entry

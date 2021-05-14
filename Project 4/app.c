@@ -10,7 +10,7 @@ int main(int argc, char **argv)
     int fd1, fd2, fd; 
     int i;
     char c; 
-    char buffer[1024];
+    char* buffer;
     char buffer2[8] = {50, 50, 50, 50, 50, 50, 50, 50};
     int size;
     char vdiskname[200]; 
@@ -37,24 +37,43 @@ int main(int argc, char **argv)
 
     fd1 = sfs_open ("file1.bin", MODE_APPEND);
     fd2 = sfs_open ("file2.bin", MODE_APPEND);
-    printf("fd1: %d\n", fd1);
-    printf("fd2: %d\n", fd2);
-    return 0;
-    for (i = 0; i < 10000; ++i) {
-        buffer[0] =   (char) 65;
-        sfs_append (fd1, (void *) buffer, 1);
+
+    for (i = 0; i < 500; ++i) {
+        buffer = "denemetest";
+        sfs_append(fd1, (void *) buffer, 10);
     }
 
-    for (i = 0; i < 10000; ++i) {
-        buffer[0] = (char) 65;
-        buffer[1] = (char) 66;
-        buffer[2] = (char) 67;
-        buffer[3] = (char) 68;
-        sfs_append(fd2, (void *) buffer, 4);
-    }
-    
     sfs_close(fd1);
-    sfs_close(fd2);
+    sfs_open("file1.bin", MODE_APPEND);
+    for (i = 0; i < 500; ++i) {
+        buffer = "testdeneme";
+        sfs_append (fd1, (void *) buffer, 10);
+    }
+
+    sfs_close(fd1);
+    sfs_open("file1.bin", MODE_READ);
+
+    char x[10];
+    for (i = 0; i < 1000; ++i) {
+        if (sfs_read(fd1, x, 10) == -1) {
+            printf("Cannot read\n");
+            break;
+        }
+        printf("%s\n", x);
+    }
+
+    sfs_close(fd1);
+    sfs_delete("file1.bin");
+
+    sfs_create("file4.bin");
+
+    fd2 = sfs_open("file4.bin", MODE_APPEND );
+
+    for (i = 0; i < 500; ++i) {
+        buffer = "testdeneme";
+        sfs_append (fd2, (void *) buffer, 10);
+    }
+    return 0;
 
     fd = sfs_open("file3.bin", MODE_APPEND);
     for (i = 0; i < 10000; ++i) {

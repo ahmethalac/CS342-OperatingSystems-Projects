@@ -144,15 +144,14 @@ int occupyEmptyBlock() {
 }
 
 void freeBlock(int blockNumber){
-    // TODO: Add one line information prompt
+    // TODO: Add one line information prompt şu şu bloklar freelendi
     int bitmapBlockNo = blockNumber / 32768 + 1;
     int bitmapBlockOffset = blockNumber % 32768;
     char bitmapBlock[4096];
     read_block(bitmapBlock, bitmapBlockNo);
     setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
     write_block(bitmapBlock, bitmapBlockNo);
-
-
+    printf("%dth block is freed!", bitmapBlockNo);
     superblock* metadata = (superblock*)malloc(BLOCKSIZE);
     read_block(metadata, 0);
     metadata->freeBlockCount += 1;
@@ -462,7 +461,6 @@ int sfs_open(char *file, int mode)
 }
 
 int sfs_close(int fd){
-    // TODO: Add one line information prompt
     if(openFiles->entries[fd].fcbIndex != -1){
         int blockNo = openFiles->entries[fd].fcbIndex / 32;
         int offsetInBlock = openFiles->entries[fd].fcbIndex % 32;
@@ -605,7 +603,6 @@ int sfs_append(int fd, void *buf, int n)
 
 int sfs_delete(char *filename)
 {
-    // TODO: Add one line information prompt
     int deletedFCBIndex = -1;
 
     //Finding the directory entry
@@ -621,6 +618,8 @@ int sfs_delete(char *filename)
                 deletedFCBIndex = block->entries[j].fcbIndex;
                 block->entries[j].fcbIndex = -1;
                 strcpy(block->entries[j].filename, "");
+                printf("The file %s is deleted from root directory!", filename);
+                printf("The FCB %d is freed!", deletedFCBIndex);
                 write_block(block, i);
                 break;
             }
@@ -638,7 +637,6 @@ int sfs_delete(char *filename)
 
         freeBlock(inodeBlockNumber);        
 
-        //If the space is not allocated for a file yet
         if(fcbBlock->fcbs[fcbBlockOffset].fileSize != 0){
             inode* inodeTable = (inode*)malloc(BLOCKSIZE);
             read_block(inodeTable, inodeBlockNumber);

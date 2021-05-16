@@ -79,7 +79,6 @@ int main(int argc, char **argv)
             printf("Cannot read\n");
             break;
         }
-        printf("%s\n", x);
     }
 
     //CLOSE

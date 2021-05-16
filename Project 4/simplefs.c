@@ -151,7 +151,7 @@ void freeBlock(int blockNumber){
     read_block(bitmapBlock, bitmapBlockNo);
     setBit(bitmapBlock, bitmapBlockOffset, 1); //inode block is free
     write_block(bitmapBlock, bitmapBlockNo);
-    printf("%dth block is freed!", bitmapBlockNo);
+    printf("%dth block is freed!\n", bitmapBlockOffset);
     superblock* metadata = (superblock*)malloc(BLOCKSIZE);
     read_block(metadata, 0);
     metadata->freeBlockCount += 1;

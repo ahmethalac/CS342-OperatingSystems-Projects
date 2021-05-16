@@ -551,7 +551,7 @@ int sfs_append(int fd, void *buf, int n)
     read_block(metadata, 0);
 
     if (metadata->freeBlockCount * BLOCKSIZE < n) {
-        printf("There is not enough blocks to write %d bytes", n);
+        printf("There is not enough blocks to write %d bytes\n", n);
         free(metadata);
         return -1;
     }

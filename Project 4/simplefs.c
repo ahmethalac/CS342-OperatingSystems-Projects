@@ -578,7 +578,7 @@ int sfs_append(int fd, void *buf, int n)
     read_block(blockContent, inodeTable->blockNumbers[blockIndex]);
 
     for (int i = 0; i < n; ++i) {
-        strcpy(&(blockContent[blockOffset]), &(((char*)buf)[i]));
+        blockContent[blockOffset] = ((char*)buf)[i];
         blockOffset++;
 
         if (blockOffset == BLOCKSIZE) {
